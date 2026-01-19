@@ -5,6 +5,13 @@ import matplotlib.pyplot as plt
 from Kitti_odometry2 import KittiEvalOdom
 
 def plot_gt(gt_dir, output_dir, name):
+    """Plots ground truth trajectories from text files.
+    
+    Args:
+        gt_dir: Directory containing ground truth text files.
+        output_dir: Directory to save the output plots.
+        name: Name to include in the plot labels.
+    """
     os.makedirs(output_dir, exist_ok=True)
     files = glob.glob(os.path.join(gt_dir, "*.txt"))
     tool = KittiEvalOdom()

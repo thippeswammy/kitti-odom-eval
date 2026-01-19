@@ -20,7 +20,17 @@ def scale_lse_solver(X, Y):
 
 
 def umeyama_alignment(x, y, with_scale=False):
-    """Computes Sim(m) transformation parameters (Umeyama, 1991)."""
+    """def umeyama_alignment(x, y, with_scale=False):
+    
+    Computes the Umeyama transformation parameters for aligning two sets of points.
+    This function calculates the rotation matrix, translation vector, and scaling
+    factor  required to align the point set `x` with the point set `y`. It first
+    checks that the  shapes of `x` and `y` are equal, then computes the means and
+    covariance of the two  sets. Singular Value Decomposition (SVD) is used to
+    derive the rotation matrix,  and the scaling factor is computed if `with_scale`
+    is set to True. The function  returns the rotation matrix, translation vector,
+    and scaling factor.
+    """
     if x.shape != y.shape:
         raise ValueError("x.shape must equal y.shape")
     m, n = x.shape
@@ -123,11 +133,28 @@ class KittiEvalOdom:
 
     @staticmethod
     def load_poses_from_txt(file_name, step=1):
-        """
-        Load poses from KITTI-format txt file with optional step interval.
+        """Load poses from a KITTI-format txt file with an optional step interval.
+        
+        This function reads a specified text file containing pose data, which may
+        include timestamps. It processes each line to extract the pose information and
+        timestamps, if available, while applying a step interval to control the number
+        of poses loaded. The function handles various formats and raises errors for
+        invalid lines, ensuring robust parsing of the input data.
+        
+        Args:
+            file_name (str): The path to the KITTI-format txt file.
+            step (int): The interval for selecting poses from the file.
+        
         Returns:
-            poses (dict): {index: 4x4 matrix}
-            times (dict): {index: timestamp} or None if no timestamps found
+            tuple: A tuple containing:
+                - poses (dict): A dictionary mapping indices to 4x4 matrices representing
+                poses.
+                - times (dict): A dictionary mapping indices to timestamps, or an empty dict if
+                no timestamps are found.
+        
+        Raises:
+            ValueError: If no valid poses are found or if a line contains an invalid number of values.
+            Exception: If there is a failure in loading the poses from the specified file.
         """
         try:
             with open(file_name, 'r') as f:
@@ -203,9 +230,20 @@ class KittiEvalOdom:
 
     @staticmethod
     def associate_poses_by_timestamp(poses_gt, times_gt, poses_result, times_result, max_diff=0.01):
-        """
-        Associate poses based on closest timestamp matching.
-        Returns re-indexed poses_gt, poses_result (0..N) containing only matched pairs.
+        """Associate poses based on the closest timestamp matching.
+        
+        This function performs a nearest neighbor search to associate ground truth
+        poses  with result poses based on their timestamps. It sorts the timestamps and
+        uses  efficient searching to find the closest matches within a specified
+        maximum  difference. The output consists of re-indexed matched pairs of poses
+        from  both ground truth and result datasets.
+        
+        Args:
+            poses_gt (dict): A dictionary of ground truth poses indexed by their keys.
+            times_gt (dict): A dictionary of ground truth timestamps indexed by their keys.
+            poses_result (dict): A dictionary of result poses indexed by their keys.
+            times_result (dict): A dictionary of result timestamps indexed by their keys.
+            max_diff (float?): The maximum allowable difference for matching timestamps. Defaults to 0.01.
         """
         sorted_keys_gt = sorted(times_gt.keys())
         sorted_keys_result = sorted(times_result.keys())
@@ -255,7 +293,7 @@ class KittiEvalOdom:
 
     @staticmethod
     def trajectory_distances(poses):
-        """Compute distances w.r.t. frame 0."""
+        """Compute cumulative distances from the first frame."""
         dist = [0]
         keys = sorted(poses.keys())
         for i in range(len(keys) - 1):
@@ -273,13 +311,13 @@ class KittiEvalOdom:
 
     @staticmethod
     def translation_error(pose_error):
-        """Compute translation error in meters."""
+        """Compute the translation error in meters."""
         dx, dy, dz = pose_error[0, 3], pose_error[1, 3], pose_error[2, 3]
         return np.sqrt(dx ** 2 + dy ** 2 + dz ** 2)
 
     @staticmethod
     def last_frame_from_segment_length(dist, first_frame, length):
-        """Find frame index for segment of specified length."""
+        """Find the frame index for a segment of specified length."""
         for i in range(first_frame, len(dist)):
             if dist[i] > dist[first_frame] + length:
                 return i
@@ -304,7 +342,7 @@ class KittiEvalOdom:
 
     @staticmethod
     def compute_overall_err(seq_err):
-        """Compute average t_rel and r_rel."""
+        """Compute the average t_rel and r_rel from a sequence of errors."""
         if not seq_err:
             return 0, 0
         t_err = sum(item[2] for item in seq_err) / len(seq_err)
@@ -312,7 +350,19 @@ class KittiEvalOdom:
         return t_err, r_err
 
     def compute_segment_error(self, seq_errs):
-        """Calculate average errors for different segments."""
+        """Calculate average errors for different segments.
+        
+        This function computes the average temporal and relative errors for  each
+        segment length defined in self.lengths. It organizes the errors  from seq_errs
+        into a dictionary, where each key corresponds to a  segment length and the
+        values are lists of error pairs. After  aggregating the errors, it calculates
+        the mean for each segment and  returns a dictionary of average errors.
+        
+        Args:
+            seq_errs: A list of error tuples, where each tuple contains
+                temporal and relative error values along with the
+                segment length.
+        """
         segment_errs = {length: [] for length in self.lengths}
         avg_segment_errs = {}
         for err in seq_errs:
@@ -330,7 +380,8 @@ class KittiEvalOdom:
 
     @staticmethod
     def compute_ATE(gt, pred):
-        """Compute Absolute Trajectory Error (RMSE)."""
+        """Compute the Absolute Trajectory Error (RMSE) between ground truth and
+        predictions."""
         errors = []
         for i in pred:
             gt_xyz = gt[i][:3, 3]
@@ -339,7 +390,18 @@ class KittiEvalOdom:
         return np.sqrt(np.mean(np.asarray(errors) ** 2)) if errors else 0
 
     def compute_RPE(self, gt, pred):
-        """Compute Relative Pose Error (translation and rotation)."""
+        """def compute_RPE(self, gt, pred):
+        Compute the Relative Pose Error (RPE) for translation and rotation.  This
+        function calculates the translation and rotation errors between  ground truth
+        poses and predicted poses. It iterates through the sorted  keys of the
+        predicted poses, computes the relative transformations,  and then calculates
+        the errors using the translation_error and  rotation_error methods. The
+        function returns the mean translation  and rotation errors, or zero if no
+        errors are computed.
+        
+        Args:
+            gt: A dictionary containing ground truth pose matrices.
+            pred: A dictionary containing predicted pose matrices."""
         trans_errors, rot_errors = [], []
         keys = sorted(pred.keys())[:-1]
         for i in keys:
@@ -377,7 +439,7 @@ class KittiEvalOdom:
 
     @staticmethod
     def compute_drift(gt, pred):
-        """Compute final drift (Euclidean distance at last frame)."""
+        """Compute the Euclidean distance of the final drift."""
         keys = sorted(gt.keys())
         if keys and keys[-1] in pred:
             return np.linalg.norm(gt[keys[-1]][:3, 3] - pred[keys[-1]][:3, 3])
@@ -385,7 +447,7 @@ class KittiEvalOdom:
 
     @staticmethod
     def write_result(f, seq, errs):
-        """Write evaluation metrics to file."""
+        """Write evaluation metrics to a file."""
         t_rel, r_rel, ate, rpe_trans, rpe_rot, trans_rmse, gt_dist, pred_dist, drift = errs
         lines = [
             f"Sequence: \t {seq}\n",
@@ -405,7 +467,27 @@ class KittiEvalOdom:
 
     def eval(self, gt_dir, result_dir, alignment=None, seqs=None, eval_seqs="", method_name='', file_name_plot='',
              step=1):
-        """Evaluate sequences and return metrics."""
+        """Evaluate sequences and return metrics.
+        
+        This function evaluates the performance of pose estimation by comparing
+        predicted poses against ground truth poses. It handles both timestamp and index
+        matching strategies, applies alignment transformations based on the specified
+        method, and computes various error metrics. The results are saved to specified
+        directories, and visualizations of the trajectories and errors are generated.
+        
+        Args:
+            gt_dir (str): The directory containing ground truth pose files.
+            result_dir (str): The directory where results and plots will be saved.
+            alignment (str?): The type of alignment to apply. Defaults to None.
+            seqs (list?): A list of sequences to evaluate. Defaults to None.
+            eval_seqs (str?): The specific sequence to evaluate. Defaults to an empty string.
+            method_name (str?): The name of the method used for evaluation. Defaults to an empty string.
+            file_name_plot (str?): The filename for the plot output. Defaults to an empty string.
+            step (int?): The step size for processing frames. Defaults to 1.
+        
+        Returns:
+            list: A list of computed metrics for the evaluated sequence.
+        """
         self.gt_dir = gt_dir
         error_dir = os.path.join(result_dir, "errors")
         self.plot_path_dir = os.path.join(result_dir, "plot_path")
@@ -519,7 +601,7 @@ class KittiEvalOdom:
 
     @staticmethod
     def save_sequence_errors(err, file_name):
-        """Save sequence errors to file."""
+        """Save sequence errors to a file."""
         with open(file_name, 'w') as f:
             for item in err:
                 f.write(" ".join(map(str, item)) + "\n")
