@@ -3,3 +3,9 @@ __pycache__/
 .idea/
 .vscode/
 *.pyc
+*.png
+*.pdf
+plot_error/
+plot_path/
+plots/
+install.md
