@@ -81,15 +81,16 @@ class KittiEvalOdom():
         self.num_lengths = len(self.lengths)
 
     def load_poses_from_txt(self, file_name):
-        """Load poses from txt (KITTI format)
-        Each line in the file should follow one of the following structures
-            (1) idx pose(3x4 matrix in terms of 12 numbers)
-            (2) pose(3x4 matrix in terms of 12 numbers)
-
+        """Load poses from a text file in KITTI format.
+        
+        This function reads a text file containing pose data, where each line can
+        either include an index followed by a 3x4 matrix or just the matrix itself. It
+        constructs a dictionary of poses, mapping frame indices to their corresponding
+        4x4 transformation matrices. The function also checks if the file includes
+        timestamps based on the structure of the last line.
+        
         Args:
-            file_name (str): txt file path
-        Returns:
-            poses (dict): {idx: 4x4 array}
+            file_name (str): txt file path.
         """
         f = open(file_name, 'r')
         s = f.readlines()
@@ -267,10 +268,11 @@ class KittiEvalOdom():
             return 0, 0
 
     def plot_trajectory(self, poses_gt, poses_result, seq):
-        """Plot trajectory for both GT and prediction
+        """Plot the trajectory for ground truth and predicted poses.
+        
         Args:
-            poses_gt (dict): {idx: 4x4 array}; ground truth poses
-            poses_result (dict): {idx: 4x4 array}; predicted poses
+            poses_gt (dict): {idx: 4x4 array}; ground truth poses.
+            poses_result (dict): {idx: 4x4 array}; predicted poses.
             seq (int): sequence index.
         """
         plot_keys = ["Ground Truth", "Ours"]
@@ -306,12 +308,18 @@ class KittiEvalOdom():
         plt.close(fig)
 
     def plot_error(self, avg_segment_errs, seq):
-        """Plot per-length error
+        # Translation error
+        """def plot_error(self, avg_segment_errs, seq):
+        Plot per-length error.  This function generates and saves two plots: one for
+        translation error  and another for rotation error, based on the provided
+        average segment  errors. It iterates over predefined lengths, calculates the
+        corresponding  errors, and visualizes them using matplotlib. The resulting
+        figures are  saved in the specified directory with filenames that include the
+        sequence  index.
+        
         Args:
             avg_segment_errs (dict): {100:[avg_t_err, avg_r_err],...}
-            seq (int): sequence index.
-        """
-        # Translation error
+            seq (int): sequence index."""
         plot_y = []
         plot_x = []
         for len_ in self.lengths:
@@ -417,13 +425,14 @@ class KittiEvalOdom():
         return ate
     
     def compute_RPE(self, gt, pred):
-        """Compute RPE
+        """Compute the Relative Pose Error (RPE) between ground-truth and predicted poses.
+        
         Args:
-            gt (4x4 array dict): ground-truth poses
-            pred (4x4 array dict): predicted poses
+            gt (dict): Ground-truth poses as a dictionary of 4x4 arrays.
+            pred (dict): Predicted poses as a dictionary of 4x4 arrays.
+        
         Returns:
-            rpe_trans
-            rpe_rot
+            tuple: Mean translation error and mean rotation error.
         """
         trans_errors = []
         rot_errors = []
@@ -499,18 +508,26 @@ class KittiEvalOdom():
     def eval(self, gt_dir, result_dir, 
                 alignment=None,
                 seqs=None):
-        """Evaulate required/available sequences
+        """Evaluate required and available sequences for pose predictions.
+        
+        This function evaluates pose predictions against ground truth data by loading
+        pose files, aligning them based on the specified alignment method, and
+        computing various errors such as translational and rotational errors. It also
+        generates necessary directories for storing results and plots, and handles both
+        dynamic key alignment and fallback to index alignment when timestamps are not
+        available.
+        
         Args:
-            gt_dir (str): ground truth poses txt files directory
-            result_dir (str): pose predictions txt files directory
-            alignment (str): if not None, optimize poses by
-                - scale: optimize scale factor for trajectory alignment and evaluation
-                - scale_7dof: optimize 7dof for alignment and use scale for trajectory evaluation
-                - 7dof: optimize 7dof for alignment and evaluation
-                - 6dof: optimize 6dof for alignment and evaluation
-            seqs (list/None):
-                - None: Evalute all available seqs in result_dir
-                - list: list of sequence indexs to be evaluated
+            gt_dir (str): Ground truth poses txt files directory.
+            result_dir (str): Pose predictions txt files directory.
+            alignment (str): If not None, optimize poses by
+                - scale: Optimize scale factor for trajectory alignment and evaluation.
+                - scale_7dof: Optimize 7dof for alignment and use scale for trajectory
+                evaluation.
+                - 7dof: Optimize 7dof for alignment and evaluation.
+                - 6dof: Optimize 6dof for alignment and evaluation.
+            seqs (list/None): None: Evaluate all available sequences in result_dir.
+                - list: List of sequence indices to be evaluated.
         """
         seq_list = ["{:02}".format(i) for i in range(0, 11)]
 
