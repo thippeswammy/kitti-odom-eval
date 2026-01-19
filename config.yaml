@@ -1,0 +1,48 @@
+eval_config:
+  - method_name: "droid_slam"
+    result_dir: "result/droid_slam"
+    gt_dir: "dataset/buggy_odom/gt_poses/"
+    alignments: ["7dof"]
+    sequences: [0, 1]
+    step: [3, 5]
+    computational_metrics_optional: true
+
+  - method_name: "DPVO"
+    result_dir: "result/DPVO"
+    gt_dir: "dataset/buggy_odom/gt_poses/"
+    alignments: ["7dof"]
+    sequences: [0, 1]
+    step: 1
+    computational_metrics_optional: true
+
+  - method_name: "features"
+    result_dir: "result/features"
+    gt_dir: "dataset/buggy_odom/gt_poses/"
+    alignments: ["7dof"]
+    sequences: [0, 1]
+    step: 1
+    computational_metrics_optional: true
+
+  - method_name: "optical_flow"
+    result_dir: "result/optical_flow"
+    gt_dir: "dataset/buggy_odom/gt_poses/"
+    alignments: ["7dof"]
+    sequences: [0, 1]
+    step: 1
+    computational_metrics_optional: true
+
+  - method_name: "orb_slam"
+    result_dir: "result/orb_slam"
+    gt_dir: "dataset/buggy_odom/gt_poses/"
+    alignments: ["7dof"]
+    sequences: [0, 1]
+    step: 1
+    computational_metrics_optional: true
+
+  - method_name: "rtab_GFTT _BRIEF"
+    result_dir: "result/rtab_GFTT_BRIEF"
+    gt_dir: "dataset/buggy_odom/gt_poses/"
+    alignments: ["7dof"]
+    sequences: [0]
+    step: 1
+    computational_metrics_optional: true

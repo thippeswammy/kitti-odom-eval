@@ -107,7 +107,11 @@ class KittiEvalOdom():
             else:
                 frame_idx = cnt
             poses[frame_idx] = P
-        return poses
+        
+        # Check if the file effectively uses timestamps (based on last line or general property)
+        # We assume if the last line had 13 columns, the file is timestamped.
+        has_timestamps = withIdx
+        return poses, has_timestamps
 
     def trajectory_distances(self, poses):
         """Compute distance for each pose w.r.t frame-0
@@ -297,7 +301,7 @@ class KittiEvalOdom():
         plt.ylabel('z (m)', fontsize=fontsize_)
         fig.set_size_inches(10, 10)
         png_title = "sequence_{:02}".format(seq)
-        fig_pdf = self.plot_path_dir + "/" + png_title + ".pdf"
+        fig_pdf = self.plot_path_dir + "/" + png_title + ".png"
         plt.savefig(fig_pdf, bbox_inches='tight', pad_inches=0)
         plt.close(fig)
 
@@ -323,7 +327,7 @@ class KittiEvalOdom():
         plt.xlabel('Path Length (m)', fontsize=fontsize_)
         plt.legend(loc="upper right", prop={'size': fontsize_})
         fig.set_size_inches(5, 5)
-        fig_pdf = self.plot_error_dir + "/trans_err_{:02}.pdf".format(seq)
+        fig_pdf = self.plot_error_dir + "/trans_err_{:02}.png".format(seq)
         plt.savefig(fig_pdf, bbox_inches='tight', pad_inches=0)
         plt.close(fig)
 
@@ -343,7 +347,7 @@ class KittiEvalOdom():
         plt.xlabel('Path Length (m)', fontsize=fontsize_)
         plt.legend(loc="upper right", prop={'size': fontsize_})
         fig.set_size_inches(5, 5)
-        fig_pdf = self.plot_error_dir + "/rot_err_{:02}.pdf".format(seq)
+        fig_pdf = self.plot_error_dir + "/rot_err_{:02}.png".format(seq)
         plt.savefig(fig_pdf, bbox_inches='tight', pad_inches=0)
         plt.close(fig)
 
@@ -423,13 +427,22 @@ class KittiEvalOdom():
         """
         trans_errors = []
         rot_errors = []
-        for i in list(pred.keys())[:-1]:
-            gt1 = gt[i]
-            gt2 = gt[i+1]
+        trans_errors = []
+        rot_errors = []
+        pred_keys = sorted(pred.keys())
+        for i in range(len(pred_keys)-1):
+            curr_key = pred_keys[i]
+            next_key = pred_keys[i+1]
+
+            if curr_key not in gt or next_key not in gt:
+                continue
+
+            gt1 = gt[curr_key]
+            gt2 = gt[next_key]
             gt_rel = np.linalg.inv(gt1) @ gt2
 
-            pred1 = pred[i]
-            pred2 = pred[i+1]
+            pred1 = pred[curr_key]
+            pred2 = pred[next_key]
             pred_rel = np.linalg.inv(pred1) @ pred2
             rel_err = np.linalg.inv(gt_rel) @ pred_rel
             
@@ -503,6 +516,7 @@ class KittiEvalOdom():
 
         # Initialization
         self.gt_dir = gt_dir
+        print(self.gt_dir)
         ave_t_errs = []
         ave_r_errs = []
         seq_ate = []
@@ -537,15 +551,34 @@ class KittiEvalOdom():
             self.cur_seq = '{:02}'.format(i)
             file_name = '{:02}.txt'.format(i)
 
-            poses_result = self.load_poses_from_txt(result_dir+"/"+file_name)
-            poses_gt = self.load_poses_from_txt(self.gt_dir + "/" + file_name)
+            poses_result, res_has_times = self.load_poses_from_txt(result_dir+"/"+file_name)
+            poses_gt, gt_has_times = self.load_poses_from_txt(self.gt_dir + "/" + file_name)
+
+            # Dynamic Key Alignment
+            if res_has_times and gt_has_times:
+                pass # Use timestamps as keys
+            else:
+                # Fallback to 0-based index alignment
+                poses_result = dict(enumerate(poses_result.values()))
+                poses_gt = dict(enumerate(poses_gt.values()))
             self.result_file_name = result_dir+file_name
 
             # Pose alignment to first frame
-            idx_0 = sorted(list(poses_result.keys()))[0]
+            # Use intersection of keys to handle frame count mismatch
+            common_keys = set(poses_result.keys()) & set(poses_gt.keys())
+            if not common_keys:
+                print(f"Error: No common frames found for sequence {i}")
+                continue
+            
+            # Reduce dictionaries to common keys to prevent downstream KeyErrors
+            poses_result = {k: poses_result[k] for k in common_keys}
+            poses_gt = {k: poses_gt[k] for k in common_keys}
+
+            idx_0 = sorted(list(common_keys))[0]
             pred_0 = poses_result[idx_0]
             gt_0 = poses_gt[idx_0]
-            for cnt in poses_result:
+            
+            for cnt in sorted(list(common_keys)):
                 poses_result[cnt] = np.linalg.inv(pred_0) @ poses_result[cnt]
                 poses_gt[cnt] = np.linalg.inv(gt_0) @ poses_gt[cnt]
 
@@ -555,7 +588,7 @@ class KittiEvalOdom():
                 # get XYZ
                 xyz_gt = []
                 xyz_result = []
-                for cnt in poses_result:
+                for cnt in sorted(list(common_keys)):
                     xyz_gt.append([poses_gt[cnt][0, 3], poses_gt[cnt][1, 3], poses_gt[cnt][2, 3]])
                     xyz_result.append([poses_result[cnt][0, 3], poses_result[cnt][1, 3], poses_result[cnt][2, 3]])
                 xyz_gt = np.asarray(xyz_gt).transpose(1, 0)
