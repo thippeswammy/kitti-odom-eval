@@ -1,116 +1,89 @@
 # KITTI Odometry Evaluation Toolbox
-[KITTI Odometry benchmark](http://www.cvlibs.net/datasets/kitti/eval_odometry.php) contains 22 stereo sequences, in which 11 sequences are provided with ground truth. 
 
+An enhanced evaluation toolbox for KITTI Odometry benchmark, enabling robust parsing of various pose formats and automatic timestamp alignment.
 
-The evaluation tool is used for evaluating KITTI odometry result.
-We include several common metrics in evaluating visual odometry, including
-* sub-sequence translation drift percentage
-* sub-sequence rotation error 
-* absolute trajectory error
-* relative pose error (translation)
-* relative pose error (rotation)
+## Features
 
-## Requirement
-We recommend using [Anaconda](https://www.anaconda.com/distribution/) for installing the prerequisites.
+- **Robust Parsing**: Supports multiple pose file formats:
+  - **KITTI**: 12 floats (3x4 matrix)
+  - **KITTI with Timestamp**: 13 floats (Timestamp + 12 floats)
+  - **TUM**: 7 floats (tx ty tz qx qy qz qw)
+  - **TUM with Timestamp**: 8 floats (Timestamp + 7 floats)
+  - **TUM with Index**: 9 floats (Timestamp + 7 floats + index/id)
+- **Automatic Timestamp Normalization**: Automatically detects absolute Unix timestamps (e.g., `1.7e9`) and normalizes them to start at `0.0` to match Ground Truth files.
+- **Comment Handling**: Automatically ignores comment lines starting with `#`.
+- **Method & Format Logging**: clearly logs detected file formats and processing details.
 
-```
-conda env create -f requirement.yml -p kitti_eval # install prerequisites
-conda activate kitti_eval  # activate the environment [kitti_eval]
-```
+## Requirements
 
-## Result Format
-Before evaluation, estimated poses should be saved in a `.txt` file. 
-Currently, there are two formats are supported.
-
-Suppose the pose for 100-th image is 
-```
-T00 T01 T02 T03
-T10 T11 T12 T13
-T20 T21 T22 T23
-0   0   0   1
-```
-You should save the pose as
-```
-# First format: skipping frames are allowed
-99 T00 T01 T02 T03 T10 T11 T12 T13 T20 T21 T22 T23 
-
-# Second format: all poses should be included in the file
-T00 T01 T02 T03 T10 T11 T12 T13 T20 T21 T22 T23
-```
+- Python 3.8 or higher
+- NumPy
+- Pandas
+- Plotly
+- PyYAML
+- SciPy
 
 ## Usage
-To use the tool, there are some possible options.
-The basic usage is 
-```
-# RESULT_PATH contains the camera pose text file, 
-# which should be named as 00.txt, 01.txt, ...
 
-# Example
-python eval_odom.py --result result/example_1/
+The primary script is `odometry.py`, which is driven by a YAML configuration file.
 
+### Running Evaluation
+
+```bash
+python3 odometry.py --config config.yaml
 ```
 
-The full usage is
+### Configuration File (`config.yaml`)
+
+Define your evaluation tasks in `config.yaml`:
+
+```yaml
+eval_config:
+  - method_name: "droid_slam"
+    result_dir: "result/droid_slam"     # Directory containing result files (00.txt, 01.txt...)
+    gt_dir: "dataset/buggy_odom/gt_poses/" # Directory containing GT files
+    alignments: ["7dof"]                # Alignment options: scale, 6dof, 7dof, scale_7dof
+    sequences: [0, 1]                   # Sequences to evaluate
+    step: 1                             # Frame step (optional)
+    computational_metrics_optional: true
 ```
-python eval_odom.py --result RESULT_PATH --align ALIGNMENT_OPTION --seqs X X X
 
-# Examples
-python eval_odom.py --result result/example_0 --align 7dof
-python eval_odom.py --result result/example_1 --align 6dof --seqs 9
-```
+### Supported Result formats
 
-`X` is the sequence number. If `--seqs` is not given, all available sequences in the folder will be evaluated.
+Your result files (e.g., `result/droid_slam/00.txt`) can be in any of the following formats:
 
-The detailed results will be saved in `RESULT_PATH`
+1. **Standard KITTI (12 floats)**:
 
-## Alignment
-Following prior works, certain degrees of alignment can be done in this evaluation script. Pass one of the following argument `--align XXX` to the script, where `XXX` can be,
-* scale
-* scale_7dof
-* 6dof
-* 7dof
+   ```
+   r11 r12 r13 tx r21 r22 r23 ty r31 r32 r33 tz
+   ```
 
-### scale
-Find a scaling factor that best align the predictions to the ground truth (GT) poses
+2. **KITTI with Timestamp (13 floats)**:
 
-### scale_7dof
-Find a 6+1 DoF transformation, including translation, rotation, and scaling, that best align the predictions to the GT poses.
-After that, only the scaling factor is used to align the predictions to the GT for evaluation.
+   ```
+   timestamp r11 r12 r13 tx ...
+   ```
 
-### 6dof
-Find a 6 DoF transformation, including translation and rotation that best align the predictions to GT poses.
+3. **TUM Format (7 floats)**:
 
-### 7dof
-Find a 6+1 DoF transformation, including translation, rotation, and scaling, that best align the predictions to the GT poses.
+   ```
+   tx ty tz qx qy qz qw
+   ```
 
-## Evaluation result
-Here shows some evaluation result examples
-<img src='misc/run_eg.jpeg' width=640 height=160>
+4. **TUM with Timestamp (8 floats)**:
 
-Trajectory comparison
+   ```
+   timestamp tx ty tz qx qy qz qw
+   ```
 
-<img src='misc/traj_eg.jpeg' width=320 height=320>
+5. **TUM with Index (9 floats) - *New***:
 
-Sub-sequence error
+   ```
+   timestamp tx ty tz qx qy qz qw index
+   ```
 
-<img src='misc/sub_seq_err.jpeg' width=480 height=240>
-
-Result summary
-
-<img src='misc/result_summary.jpeg' width=320 height=240>
+   *Note: Timestamps can be absolute (Unix epoch) or relative. The tool will normalize them automatically.*
 
 ## License
-The code is released under the permissive MIT license.
 
-If you use this toolbox, a footnote with the link to this toolbox is appreciated.
-
-You can also cite the [DF-VO](https://github.com/Huangying-Zhan/DF-VO) which we release the toolbox in the first place.
-
-```
-@article{zhan2019dfvo,
-  title={Visual Odometry Revisited: What Should Be Learnt?},
-  author={Zhan, Huangying and Weerasekera, Chamara Saroj and Bian, Jiawang and Reid, Ian},
-  journal={arXiv preprint arXiv:1909.09803},
-  year={2019}
-}
-```
+Released under the MIT license.

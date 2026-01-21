@@ -39,10 +39,19 @@ eval_config:
     step: 1
     computational_metrics_optional: true
 
-  - method_name: "rtab_GFTT _BRIEF"
+  - method_name: "rtab_GFTT_BRIEF"
     result_dir: "result/rtab_GFTT_BRIEF"
     gt_dir: "dataset/buggy_odom/gt_poses/"
     alignments: ["7dof"]
-    sequences: [0]
+    sequences: [0, 1]
     step: 1
     computational_metrics_optional: true
+
+  - method_name: "pyCuVSLAM"
+    result_dir: "result/pyCuVSLAM"
+    gt_dir: "dataset/buggy_odom/gt_poses/"
+    alignments: ["7dof"]
+    sequences: [0, 1]
+    step: 1
+    computational_metrics_optional: true
+    

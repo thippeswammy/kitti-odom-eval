@@ -125,67 +125,94 @@ class KittiEvalOdom:
     def load_poses_from_txt(file_name, step=1):
         """
         Load poses from KITTI-format txt file with optional step interval.
+        Supported formats:
+        - 12 floats: row-major 3x4 matrix (R11 R12 R13 Tx ... R33 Tz)
+        - 13 floats: timestamp + 12 floats
+        - 7 floats: tx ty tz qx qy qz qw
+        - 8 floats: timestamp tx ty tz qx qy qz qw
+        - 9 floats: timestamp tx ty tz qx qy qz qw index (TUM with index/ID)
         Returns:
             poses (dict): {index: 4x4 matrix}
             times (dict): {index: timestamp} or None if no timestamps found
         """
+        from scipy.spatial.transform import Rotation
+        
         try:
             with open(file_name, 'r') as f:
                 lines = f.readlines()
             poses = {}
             times = {}
             count = 0
+            format_type = "Unknown"
             has_times = False
-            
-            # Check first valid line to detect format
+
+            # Check detecting format (optional, just to set has_times flag correctly)
             for line in lines:
+                if line.strip().startswith("#") or not line.strip():
+                    continue
                 split = [float(i) for i in line.strip().split() if i]
-                if len(split) == 13:
+                if len(split) in [13, 8, 9]:
                     has_times = True
                 break
 
             for cnt, line in enumerate(lines):
+                if line.strip().startswith("#") or not line.strip():
+                    continue
+                    
+                if (cnt % step) != 0:
+                    continue
+                
                 try:
                     line_split = [float(i) for i in line.strip().split() if i]
+                    n_vals = len(line_split)
+                    if n_vals == 0: continue
+
+                    P = np.eye(4)
+                    timestamp = None
                     
-                    if len(line_split) == 12:
-                         # No timestamp
-                         offset = 0
+                    if n_vals == 12:
+                         # 3x4 matrix
+                         P[:3, :] = np.array(line_split).reshape(3, 4)
                          timestamp = cnt
-                    elif len(line_split) == 13:
-                         # Has timestamp
-                         offset = 1
+                         format_type = "KITTI 12"
+                    elif n_vals == 13:
+                         # timestamp + 3x4 matrix
                          timestamp = line_split[0]
+                         P[:3, :] = np.array(line_split[1:]).reshape(3, 4)
+                         format_type = "KITTI 13 (Timestamp)"
+                    elif n_vals == 7:
+                         # tx ty tz qx qy qz qw
+                         t = line_split[:3]
+                         q = line_split[3:]
+                         # Scipy expects [x, y, z, w]
+                         P[:3, :3] = Rotation.from_quat(q).as_matrix()
+                         P[:3, 3] = t
+                         timestamp = cnt
+                         format_type = "TUM 7"
+                    elif n_vals == 8:
+                         # timestamp tx ty tz qx qy qz qw
+                         timestamp = line_split[0]
+                         t = line_split[1:4]
+                         q = line_split[4:]
+                         P[:3, :3] = Rotation.from_quat(q).as_matrix()
+                         P[:3, 3] = t
+                         format_type = "TUM 8 (Timestamp)"
+                    elif n_vals == 9:
+                         # timestamp tx ty tz qx qy qz qw index
+                         # Ignore the 9th value (index)
+                         timestamp = line_split[0]
+                         t = line_split[1:4]
+                         q = line_split[4:8]
+                         P[:3, :3] = Rotation.from_quat(q).as_matrix()
+                         P[:3, 3] = t
+                         format_type = "TUM 9 (Timestamp + Index)"
                     else:
-                        raise ValueError(f"Invalid number of values ({len(line_split)}) in line {cnt + 1}")
+                        raise ValueError(f"Invalid number of values ({n_vals}) in line {cnt + 1}")
                     
-                    # Logic: 
-                    # If step=1, we take everything.
-                    # If step > 1, the logic depends on whether we are loading GT or Result.
-                    # This function is generic. 
-                    # Existing logic: if (frame_idx % step) == 0: include.
-                    # If file has timestamps (13 cols), 'frame_idx' was used as int(timestamp) in old code? 
-                    # "frame_idx = int(line_split[0]) if offset else cnt" -> yes.
-                    # If timestamp is 0.1, 0.2... int(timestamp) is always 0. That was a bug/limitation for float timestamps.
-                    
-                    # NEW LOGIC:
-                    # If using `step`, we primarily care about the INDEX in the file (assuming file is dense sequence).
-                    # If the file is already sparse, applying step might skip further.
-                    
-                    # Conservative approach matching previous behavior 'step' works on 'cnt':
-                    # BUT 'frame_idx' derivation was ambiguous.
-                    # Let's align on 'cnt' (line number) for stepping if we assuming file is ordered.
-                    
-                    if (cnt % step) == 0:
-                        P = np.eye(4)
-                        for row in range(3):
-                            for col in range(4):
-                                P[row, col] = line_split[row * 4 + col + offset]
-                        
-                        poses[count] = P
-                        if has_times:
-                            times[count] = timestamp
-                        count += 1
+                    poses[count] = P
+                    if has_times:
+                        times[count] = timestamp
+                    count += 1
                         
                 except ValueError as e:
                     print(f"Error parsing line {cnt + 1} in {file_name}: {e}")
@@ -193,10 +220,18 @@ class KittiEvalOdom:
             
             if not poses:
                 raise ValueError(f"No valid poses found in {file_name}")
+
+            # Normalize timestamps if they look like absolute epochs (> 10000s)
+            # This helps matching with GT which typically starts at 0.0
+            if has_times and times:
+                min_t = min(times.values())
+                if min_t > 10000.0:
+                    print(f"Normalizing timestamps by subtracting {min_t} (detected absolute epochs)")
+                    for k in times:
+                        times[k] -= min_t
             
-            # Return times only if detected, else empty dict or None? 
-            # Consistent return type 'dict' is better, empty if no times.
-            return poses, (times if has_times else {})
+            return poses, (times if has_times else {}), format_type
+
 
         except Exception as e:
             raise Exception(f"Failed to load poses from {file_name}: {e}")
@@ -386,7 +421,8 @@ class KittiEvalOdom:
     @staticmethod
     def write_result(f, seq, errs):
         """Write evaluation metrics to file."""
-        t_rel, r_rel, ate, rpe_trans, rpe_rot, trans_rmse, gt_dist, pred_dist, drift = errs
+        t_rel, r_rel, ate, rpe_trans, rpe_rot, trans_rmse, gt_dist, pred_dist, drift, t_rel_100 = errs
+        drift_pct = (drift / gt_dist * 100) if gt_dist > 0 else 0
         lines = [
             f"Sequence: \t {seq}\n",
             f"t_rel (%): \t {t_rel * 100:.3f}\n",
@@ -397,11 +433,13 @@ class KittiEvalOdom:
             f"RPE rot (deg): \t {rpe_rot * 180 / np.pi:.3f}\n",
             f"GT Distance (m): \t {gt_dist:.3f}\n",
             f"Pred Distance (m): \t {pred_dist:.3f}\n",
-            f"Drift (m): \t {drift:.3f}\n\n"
+            f"Drift (m): \t {drift:.3f}\n",
+            f"Drift (%): \t {drift_pct:.3f}\n",
+            f"t_rel_100m (%): \t {t_rel_100 * 100:.3f}\n\n"
         ]
         f.writelines(lines)
         return [t_rel * 100, r_rel / np.pi * 180 * 100, ate, rpe_trans, rpe_rot * 180 / np.pi, trans_rmse, gt_dist,
-                pred_dist, drift]
+                pred_dist, drift, drift_pct, t_rel_100 * 100]
 
     def eval(self, gt_dir, result_dir, alignment=None, seqs=None, eval_seqs="", method_name='', file_name_plot='',
              step=1):
@@ -423,7 +461,11 @@ class KittiEvalOdom:
             try:
                 # Load Results (step=1 usually unless pre-sparsing logic applied by user externally, but let's assume we read all)
                 # Then we match to GT using 'step' or timestamps.
-                poses_result, times_result = self.load_poses_from_txt(result_file, step=1)
+                # Load Results
+                poses_result, times_result, res_fmt = self.load_poses_from_txt(result_file, step=1)
+                print(f"Processing Method: {method_name} | Sequence: {eval_seqs}")
+                print(f"  Result File: {result_file} | Format: {res_fmt}")
+
                 
                 # Load GT
                 # If we rely on index matching with step, we pass step here.
@@ -432,7 +474,16 @@ class KittiEvalOdom:
                 # But if defaulting to index, we need `step` application.
                 
                 # Strategy: Load GT with step=1 first.
-                poses_gt_raw, times_gt_raw = self.load_poses_from_txt(gt_file, step=1)
+                # Strategy: Load GT with step=1 first.
+                poses_gt_raw, times_gt_raw, gt_fmt = self.load_poses_from_txt(gt_file, step=1)
+                
+                # Print GT info only once per GT file
+                if not hasattr(KittiEvalOdom, 'printed_gt_files'):
+                    KittiEvalOdom.printed_gt_files = set()
+                if gt_file not in KittiEvalOdom.printed_gt_files:
+                    print(f"  GT File: {gt_file} | Format: {gt_fmt}")
+                    KittiEvalOdom.printed_gt_files.add(gt_file)
+
                 
                 # Determine matching strategy
                 if times_result and times_gt_raw:
@@ -508,10 +559,17 @@ class KittiEvalOdom:
                 pos_result = np.array([poses_result[k][:3, 3] for k in sorted(poses_result.keys())])
                 pos_gt = np.array([poses_gt[k][:3, 3] for k in sorted(poses_gt.keys()) if k in poses_result])
                 self.plot_trajectory(poses_gt, poses_result, eval_seqs, pos_gt, pos_result, method_name, file_name_plot)
-                self.plot_error(self.compute_segment_error(seq_err), eval_seqs)
+                avg_segment_errs_res = self.compute_segment_error(seq_err)
+                self.plot_error(avg_segment_errs_res, eval_seqs)
+                
+                # Extract 100m error
+                t_rel_100 = 0.0
+                if 100 in avg_segment_errs_res and avg_segment_errs_res[100]:
+                    t_rel_100 = avg_segment_errs_res[100][0]
+
                 metrics = self.write_result(f, eval_seqs,
                                             [t_rel, r_rel, ate, rpe_trans, rpe_rot, trans_rmse, gt_dist, pred_dist,
-                                             drift])
+                                             drift, t_rel_100])
                 return metrics
             except Exception as e:
                 print(f"Error processing sequence {eval_seqs}: {e}")
@@ -618,7 +676,7 @@ def get_folders_in_dir(dir_path):
 if __name__ == "__main__":
     # Headers in the exact order requested
     headers = ["Method", "Alignment", "Sequence", "ATE (m)", "Trans RMSE (m)", "RPE trans (m)", "t_rel (%)",
-               "r_rel (deg/100m)", "RPE rot (deg)", "GT Dist (m)", "Pred Dist (m)", "Drift (m)", "FPS",
+               "r_rel (deg/100m)", "RPE rot (deg)", "GT Dist (m)", "Pred Dist (m)", "Drift (m)", "Drift (%)", "t_rel @ 100m (%)", "FPS",
                "Total Time (s)", "Avg CPU Overall (%)", "Avg RAM (GB)", "Avg GPU Mem (%)", "Avg GPU (%)"]
 
     results_table = []
@@ -776,6 +834,8 @@ if __name__ == "__main__":
                             f"{eval_metrics[6]:.3f}",  # GT Dist (m)
                             f"{eval_metrics[7]:.3f}",  # Pred Dist (m)
                             f"{eval_metrics[8]:.3f}",  # Drift (m)
+                            f"{eval_metrics[9]:.3f}",  # Drift (%)
+                            f"{eval_metrics[10]:.3f}", # t_rel @ 100m (%)
                             f"{comp_metrics.get('fps', 0):.3f}",
                             f"{comp_metrics.get('total_time', 0):.3f}",
                             f"{comp_metrics.get('avg_cpu_overall', 0):.3f}",
