@@ -2,7 +2,7 @@ import os
 import glob
 import numpy as np
 import matplotlib.pyplot as plt
-from Kitti_odometry2 import KittiEvalOdom
+from odometry import KittiEvalOdom
 
 def plot_gt(gt_dir, output_dir, name):
     os.makedirs(output_dir, exist_ok=True)
@@ -12,7 +12,7 @@ def plot_gt(gt_dir, output_dir, name):
     for f in files:
         seq = os.path.basename(f).split('.')[0]
         try:
-            poses, _ = tool.load_poses_from_txt(f, step=1)
+            poses, _, _ = tool.load_poses_from_txt(f, step=1)
             
             # Extract positions
             pos_xz = np.array([[poses[k][0, 3], poses[k][2, 3]] for k in sorted(poses.keys())])
@@ -44,3 +44,6 @@ if __name__ == "__main__":
     
     # kitti_odom
     plot_gt("dataset/kitti_odom/gt_poses/", "result/gt_plt/kitti_odom", "KITTI")
+
+    # virya_odom
+    plot_gt("dataset/virya_odom/gt_poses/", "result/gt_plt/virya_odom", "Virya")

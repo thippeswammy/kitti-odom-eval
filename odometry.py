@@ -36,7 +36,10 @@ def umeyama_alignment(x, y, with_scale=False):
     if np.linalg.det(u) * np.linalg.det(v) < 0.0:
         s[m - 1, m - 1] = -1
     r = u.dot(s).dot(v)
-    c = 1 / sigma_x * np.trace(np.diag(d).dot(s)) if with_scale else 1.0
+    if sigma_x < 1e-12:
+        c = 1.0
+    else:
+        c = 1 / sigma_x * np.trace(np.diag(d).dot(s)) if with_scale else 1.0
     t = mean_y - c * r.dot(mean_x)
     return r, t, c
 
