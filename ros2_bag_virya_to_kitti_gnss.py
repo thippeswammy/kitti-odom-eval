@@ -51,7 +51,22 @@ R_ros_to_kitti = np.array([
 # ---------------------
 
 def initialize_reader(bag_path):
-    """Initializes and returns a configured SequentialReader."""
+    """Initialize and return a configured SequentialReader.
+    
+    This function determines the appropriate storage ID based on the provided
+    `bag_path`, which can be a file or directory. It checks the file extension to
+    identify whether the storage ID should be 'mcap' or 'sqlite3'. After
+    determining the storage options, it attempts to open the reader with the
+    specified options. If an error occurs during the opening process, it logs the
+    error and returns None.
+    
+    Args:
+        bag_path (str): The path to the bag file or directory.
+    
+    Returns:
+        SequentialReader or None: A configured SequentialReader instance or None if an
+            error occurs during opening.
+    """
     reader = SequentialReader()
     found_storage_id = 'sqlite3'
     if os.path.isfile(bag_path):
@@ -81,6 +96,21 @@ def initialize_reader(bag_path):
 
 
 def extract_data(bag_path, image_topic, output_dir, timestamp_file):
+    """Extracts images and timestamps from a ROS bag file.
+    
+    This function initializes a reader for the specified ROS bag file  located at
+    `bag_path`. It creates a directory for storing extracted  images and sets a
+    filter for the specified `image_topic`. As it  reads messages from the bag, it
+    deserializes them into images,  saves them to the output directory, and writes
+    relative timestamps  to the specified `timestamp_file`. The function returns a
+    list of  absolute timestamps for the extracted images.
+    
+    Args:
+        bag_path: The path to the ROS bag file.
+        image_topic: The topic from which to extract images.
+        output_dir: The directory where images will be saved.
+        timestamp_file: The file where relative timestamps will be written.
+    """
     reader = initialize_reader(bag_path)
     if reader is None: return None
     image_folder = os.path.join(output_dir, 'image_0')
@@ -114,6 +144,7 @@ def extract_data(bag_path, image_topic, output_dir, timestamp_file):
 
 
 def extract_calib(bag_path, calib_topic, output_file):
+    """Extracts calibration data from a bag file and writes it to an output file."""
     reader = initialize_reader(bag_path)
     if reader is None: return
     topic_filter = StorageFilter(topics=[calib_topic])
@@ -137,6 +168,7 @@ def extract_calib(bag_path, calib_topic, output_file):
 
 
 def extract_imu(bag_path, imu_topic, output_csv_file):
+    """Extracts IMU data from a bag file and writes it to a CSV file."""
     reader = initialize_reader(bag_path)
     if reader is None: return
     topic_filter = StorageFilter(topics=[imu_topic])
@@ -157,6 +189,21 @@ def extract_imu(bag_path, imu_topic, output_csv_file):
 
 
 def extract_gnss_ground_truth(bag_path, fix_topic, heading_topic, output_poses_file, image_abs_timestamps=None):
+    """Extract GNSS ground truth data and generate poses.
+    
+    This function reads GNSS and heading data from a ROS bag file, processes the
+    data to convert coordinates from latitude, longitude, and altitude to East-
+    North-Up (ENU) format, and interpolates the poses based on image timestamps or
+    GNSS timestamps. It also normalizes the poses to a gravity-aligned frame and
+    saves the resulting poses to a specified output file.
+    
+    Args:
+        bag_path (str): The path to the ROS bag file containing GNSS and heading data.
+        fix_topic (str): The topic name for GNSS fix messages.
+        heading_topic (str): The topic name for heading messages.
+        output_poses_file (str): The file path where the output poses will be saved.
+        image_abs_timestamps (list?): A list of absolute timestamps for images to align poses with.
+    """
     print(f"\n--- Starting GNSS Ground Truth Extraction (Refactored Gravity-Aligned Logic) ---")
     
     reader = initialize_reader(bag_path)
